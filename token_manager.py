@@ -5,5 +5,5 @@ def get_github_token():
         with open(".token", "r") as f:
             return f.read().strip()
     except FileNotFoundError:
-        print("❌ .token file nahi mili.")
+        print(".token file nahi mili.")
         return None
