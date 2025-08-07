@@ -1,61 +1,83 @@
 # contribution_finder.py
 
 import requests
-from token_manager import get_github_token
+from token_manager import get_github_token  # Make sure token_manager.py exists and returns your GitHub token
 
-def search_repositories(language, per_page, token):
-    headers = {"Authorization": f"token {token}"}
-    # ✔ Use issues:>0 to only get repos with open issues
-    query = f"language:{language} is:public issues:>0"
-    url = f"https://api.github.com/search/repositories?q={query}&sort=updated&order=desc&per_page={per_page}"
-    response = requests.get(url, headers=headers)
+def get_good_first_issues(repo_limit=5, topic=None):
+    print(f"\n[INFO] Searching top {repo_limit} repositories with good first issues for topic: {topic}")
 
-    if response.status_code == 200:
-        return response.json().get("items", [])
-    else:
-        print("❌ Repo search request failed.")
-        print("Status Code:", response.status_code)
-        print("Response:", response.text)
-        return []
+    query = "good-first-issues:>0"
+    if topic:
+        query += f" topic:{topic}"
 
-def find_repos_with_open_issues(language, count):
+    url = f"https://api.github.com/search/repositories?q={query}&sort=stars&order=desc&per_page={repo_limit}"
+
+    # Optional: Use GitHub token if available
     token = get_github_token()
-    if not token:
-        print("❌ GitHub token missing.")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print("[ERROR] Failed to fetch repositories:", e)
         return
 
-    repos = search_repositories(language, count, token)
+    repos = data.get("items", [])
+
     if not repos:
-        print(f"📭 No repositories found with open issues in {language}.")
+        print("[WARNING] No repositories found.")
         return
 
-    output_lines = []
-    for repo in repos:
-        full_name = repo.get("full_name", "Unknown")
-        issues = repo.get("open_issues_count", 0)
-        url = repo.get("html_url", "") + "/issues"
+    for index, repo in enumerate(repos, start=1):
+        print(f"\n[{index}] Repository: {repo['full_name']}")
+        print(f"    Stars     : {repo['stargazers_count']}")
+        print(f"    URL       : {repo['html_url']}")
+        print(f"    Topics    : {', '.join(repo.get('topics', [])) if repo.get('topics') else 'None'}")
 
-        output_lines.append(f"✅ Repo: {full_name}")
-        output_lines.append(f"🔢 Open Issues: {issues}")
-        output_lines.append(f"🔗 Link: {url}")
-        output_lines.append("-" * 60)
-
-    # Join all lines into a single string
-    output = "\n".join(output_lines)
-
-    # Show output to user
-    print("\n📦 Repositories with Open Issues:")
-    print(output)
-
-    # Ask if user wants to save
-    choice = input("\n📝 Do you want to save this output to a text file? (y/n): ").strip().lower()
-    if choice == 'y':
-        filename = f"repos_with_issues_{language}.txt"
+        issues_url = repo['issues_url'].replace("{/number}", "")
         try:
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(output)
-            print(f"✅ Output saved to {filename}")
+            issues_response = requests.get(
+                issues_url + "?labels=good%20first%20issue&state=open",
+                headers=headers
+            )
+            issues_response.raise_for_status()
+            issues = issues_response.json()
         except Exception as e:
-            print("❌ Failed to save file:", e)
-    else:
-        print("📄 Output not saved.")
+            print("    [!] Failed to fetch issues:", e)
+            continue
+
+        if not issues:
+            print("    [!] No good first issues found.")
+            continue
+
+        print("    Good First Issues:")
+        for issue in issues[:3]:  # Show top 3 issues
+            print(f"     - {issue['title']}")
+            print(f"       {issue['html_url']}")
+
+
+# === Main Program ===
+if __name__ == "__main__":
+    print("GitHub Good First Issue Finder")
+
+    try:
+        count = int(input("How many repositories per topic do you want to see? "))
+        tags_input = input("Enter one or more topics (comma-separated, e.g., python,react,go): ").strip()
+        topics = [tag.strip() for tag in tags_input.split(",") if tag.strip()]
+
+        if not topics:
+            print("No valid topics entered.")
+        else:
+            for topic in topics:
+                print(f"\n========== Topic: {topic} ==========")
+                get_good_first_issues(repo_limit=count, topic=topic)
+
+    except ValueError:
+        print("Invalid number entered.")
