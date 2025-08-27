@@ -1,5 +1,5 @@
-﻿from modules.github_summary import show_github_summary
-from modules.contribution_finder import get_good_first_issues  # Correct function
+from github_summary import show_github_summary
+from contribution_finder import get_good_first_issues  # Correct function
 
 def menu():
     while True:
@@ -38,4 +38,3 @@ def menu():
 
 if __name__ == "__main__":
     menu()
-
